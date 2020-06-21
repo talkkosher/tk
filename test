@@ -1,0 +1,64 @@
+<?php
+$url = "https://www.dollarphone.com/pmapi/pinmanager.asmx";
+$user = "username";
+$pwd = "password";
+$headers = array(
+"Content-type: text/xml; charset=utf-8",
+"Cache-Control: no-cache",
+"SOAPAction: https://dollarphone.com/PMAPI/PinManager/TopUpRequest",
+);
+$soap_xml = "<?xml version=\"1.0\" encoding=\"utf-8\"?>" .
+"<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"
+xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">" .
+"<soap:Body>" .
+"<TopUpRequest xmlns=\"https://dollarphone.com/PMAPI/PinManager\">" .
+"<TopUpReq>" .
+"<Action>PurchasePin</Action>" .
+"<OfferingId>30084223</OfferingId>" .
+"<Amount>29.95</Amount>" .
+"</TopUpReq>" .
+"</TopUpRequest>" .
+"</soap:Body>" .
+"</soap:Envelope>";
+$resp_xml = sendRequest($url,$user,$pwd,$soap_xml,$headers);
+$tu_res = $resp_xml->children('soap', true)->Body->children()->TopUpRequestResponse->TopUpRequestResult;
+echo "<p>TransId: " . $tu_res->TransId . "</p>";
+if ($tu_res->TransId <= 0) exit();
+$soap_xml = "<soap:Envelope xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"
+xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\" xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">" .
+"<soap:Body>" .
+" <TopupConfirm xmlns=\"https://dollarphone.com/PMAPI/PinManager\">" .
+" <TransID>" . $tu_res->TransId . "</TransID>" .
+" </TopupConfirm>" .
+"</soap:Body>".
+"</soap:Envelope>";
+$headers[2] = "SOAPAction: https://dollarphone.com/PMAPI/PinManager/TopupConfirm";
+do
+{
+sleep(1);
+$resp_xml = sendRequest($url,$user,$pwd,$soap_xml,$headers);
+$tc_res = $resp_xml->children('soap', true)->Body->children()->TopupConfirmResponse->children()->TopupConfirmResult-
+>children();
+} while ($tc_res->Status == "Pending");
+if ($tc_res->Status == "Success") {
+echo "<p>PIN: <b>" . $tc_res->PIN . "</b></p>";
+} else {
+echo "<p>Failed</p>";
+}
+function sendRequest($url,$user,$pwd,$xml,$headers) {
+$ch = curl_init();
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, 0);
+curl_setopt($ch, CURLOPT_URL, $url);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_USERPWD, $user . ':' . $pwd);
+curl_setopt($ch, CURLOPT_HTTPAUTH, CURLAUTH_NTLM);
+curl_setopt($ch, CURLOPT_POST, true);
+curl_setopt($ch, CURLOPT_POSTFIELDS, $xml);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+$resp = curl_exec($ch);
+curl_close($ch);
+//echo "<xmp>" . $resp . "</xmp>";
+$resp_xml = simplexml_load_string($resp);
+return $resp_xml;
+}
+?>
